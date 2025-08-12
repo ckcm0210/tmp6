@@ -1,0 +1,379 @@
+# -*- coding: utf-8 -*-
+"""
+Inspect Mode UI Module
+
+This module creates a simplified version of the worksheet functionality
+for Inspect Mode, reusing existing components but hiding unnecessary elements.
+"""
+
+import tkinter as tk
+from tkinter import ttk
+from ui.worksheet.controller import WorksheetController
+
+class InspectModeView:
+    """Simplified worksheet view for Inspect Mode"""
+    
+    def __init__(self, parent_frame, root_app):
+        self.parent = parent_frame
+        self.root = root_app
+        
+        # Create dual pane layout
+        self.setup_dual_pane_layout()
+    
+    def setup_dual_pane_layout(self):
+        """Setup dual-pane layout with simplified worksheet controllers"""
+        # Create main container
+        main_frame = ttk.Frame(self.parent)
+        main_frame.pack(fill='both', expand=True, padx=5, pady=5)
+        
+        # Create PanedWindow for resizable panes
+        self.paned_window = ttk.PanedWindow(main_frame, orient=tk.HORIZONTAL)
+        self.paned_window.pack(fill='both', expand=True)
+        
+        # Create left pane
+        left_frame = ttk.LabelFrame(self.paned_window, text="Left Pane", padding=5)
+        self.paned_window.add(left_frame, weight=1)
+        
+        # Create right pane  
+        right_frame = ttk.LabelFrame(self.paned_window, text="Right Pane", padding=5)
+        self.paned_window.add(right_frame, weight=1)
+        
+        # Create simplified worksheet controllers
+        self.left_controller = SimplifiedWorksheetController(left_frame, self.root, "Left")
+        self.right_controller = SimplifiedWorksheetController(right_frame, self.root, "Right")
+
+class SimplifiedWorksheetController(WorksheetController):
+    """Simplified version of WorksheetController for Inspect Mode"""
+    
+    def __init__(self, parent_frame, root_app, pane_name):
+        # Initialize with modified pane name for Inspect Mode
+        super().__init__(parent_frame, root_app, f"Inspect-{pane_name}")
+        
+        # Use after_idle to ensure UI is fully created before hiding elements
+        self.view.after_idle(self.setup_inspect_mode_ui)
+    
+    def setup_inspect_mode_ui(self):
+        """Setup Inspect Mode UI after the view is fully initialized"""
+        self.hide_unnecessary_elements()
+        self.modify_layout_for_inspect_mode()
+    
+    def hide_unnecessary_elements(self):
+        """Hide UI elements that are not needed in Inspect Mode"""
+        try:
+            # Hide progress frame (progress bar and label) - use grid_forget since it uses grid
+            if hasattr(self.view, 'progress_frame'):
+                self.view.progress_frame.grid_forget()
+                print(f"Actually hidden progress frame in {self.pane_name}")
+            
+            # Find and hide all unwanted widgets by checking all children recursively
+            self._hide_widgets_recursively(self.view)
+            
+        except Exception as e:
+            print(f"Warning: Could not hide some UI elements in {self.pane_name}: {e}")
+    
+    def _hide_widgets_recursively(self, parent_widget):
+        """Recursively find and hide unwanted widgets"""
+        try:
+            for widget in parent_widget.winfo_children():
+                # Check LabelFrame for Filters
+                if isinstance(widget, ttk.LabelFrame):
+                    try:
+                        widget_text = str(widget.cget('text')).lower()
+                        if 'filter' in widget_text:
+                            widget.grid_forget()
+                            widget.pack_forget()
+                            print(f"Actually hidden filter frame in {self.pane_name}")
+                            continue
+                    except:
+                        pass
+                
+                # Check Frame for unwanted buttons
+                if isinstance(widget, ttk.Frame):
+                    try:
+                        has_unwanted_buttons = False
+                        for child in widget.winfo_children():
+                            if isinstance(child, ttk.Button):
+                                button_text = str(child.cget('text')).lower()
+                                unwanted_keywords = ['summarize', 'export', 'import', 'reconnect']
+                                if any(keyword in button_text for keyword in unwanted_keywords):
+                                    has_unwanted_buttons = True
+                                    break
+                        
+                        if has_unwanted_buttons:
+                            widget.grid_forget()
+                            widget.pack_forget()
+                            print(f"Actually hidden summary buttons frame in {self.pane_name}")
+                            continue
+                    except:
+                        pass
+                
+                # Recursively check children
+                self._hide_widgets_recursively(widget)
+                
+        except Exception as e:
+            print(f"Warning in recursive hide for {self.pane_name}: {e}")
+    
+    def modify_layout_for_inspect_mode(self):
+        """Modify the layout for Inspect Mode requirements"""
+        try:
+            # Adjust formula list height to show one result row (not just column headers)
+            if hasattr(self.view, 'result_tree'):
+                # Height=2 means 1 header row + 1 data row
+                self.view.result_tree.configure(height=2)
+                print(f"Modified formula list height to show one result row in {self.pane_name}")
+            
+            # Add scan button for current Excel selection
+            self.add_scan_current_selection_button()
+            
+        except Exception as e:
+            print(f"Warning: Could not modify layout in {self.pane_name}: {e}")
+    
+    def add_scan_current_selection_button(self):
+        """Add a button to scan the currently selected cell in Excel"""
+        try:
+            # Create a frame for the scan button using grid (since WorksheetView uses grid)
+            scan_frame = ttk.Frame(self.view)
+            
+            # Use grid to place it at the top (row 0)
+            scan_frame.grid(row=0, column=0, columnspan=10, sticky='ew', pady=5, padx=5)
+            
+            # Add scan button (similar to Selected Range functionality in Normal Mode)
+            scan_btn = ttk.Button(
+                scan_frame,
+                text="Scan Selected Cell",
+                command=self.scan_selected_cell
+            )
+            scan_btn.pack(side=tk.LEFT, padx=5)
+            
+            # Add Close All Tabs button (same as Normal Mode)
+            close_tabs_btn = ttk.Button(
+                scan_frame,
+                text="Close All Tabs",
+                command=self.close_all_tabs
+            )
+            close_tabs_btn.pack(side=tk.LEFT, padx=5)
+            
+            # Shift all other widgets down by updating their row numbers
+            self._shift_existing_widgets_down()
+            
+            print(f"Successfully added scan button in {self.pane_name}")
+            
+        except Exception as e:
+            print(f"Warning: Could not add scan button in {self.pane_name}: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _shift_existing_widgets_down(self):
+        """Shift existing widgets down to make room for the scan button"""
+        try:
+            # Get all widgets and their grid info
+            for widget in self.view.winfo_children():
+                if widget != self.view.winfo_children()[-1]:  # Skip the scan frame we just added
+                    try:
+                        grid_info = widget.grid_info()
+                        if grid_info and 'row' in grid_info:
+                            current_row = int(grid_info['row'])
+                            # Move everything down by 1 row
+                            widget.grid_configure(row=current_row + 1)
+                    except:
+                        pass
+        except Exception as e:
+            print(f"Warning: Could not shift widgets in {self.pane_name}: {e}")
+    
+    def scan_selected_cell(self):
+        """Optimized scan for single cell in Inspect Mode - bypasses heavy refresh_data"""
+        import win32com.client
+        import time
+        from tkinter import messagebox
+        
+        try:
+            print(f"[{self.pane_name}] Starting optimized single cell scan...")
+            
+            # Clear any previous scanning state
+            if hasattr(self, 'scanning_selected_range'):
+                self.scanning_selected_range = False
+            if hasattr(self, 'selected_scan_address'):
+                self.selected_scan_address = None
+            
+            # === Step 1: Connect to Excel ===
+            try:
+                xl = win32com.client.GetActiveObject("Excel.Application")
+            except:
+                try:
+                    xl = win32com.client.Dispatch("Excel.Application")
+                    xl.Visible = True
+                    messagebox.showinfo("Excel", "Started new Excel instance, please open file and scan again")
+                    return
+                except Exception as e:
+                    messagebox.showerror("Excel Error", f"Could not connect to Excel: {e}")
+                    return
+            
+            # === Step 2: Get workbook and worksheet ===
+            try:
+                workbook = xl.ActiveWorkbook
+                worksheet = xl.ActiveSheet
+                
+                if not workbook or not worksheet:
+                    messagebox.showerror("Excel Error", "No active workbook or worksheet found")
+                    return
+                
+                # Update UI labels
+                if hasattr(self.view, 'file_label'):
+                    self.view.file_label.config(text=workbook.Name, foreground="black")
+                if hasattr(self.view, 'path_label'):
+                    self.view.path_label.config(text=workbook.Path, foreground="black")
+                if hasattr(self.view, 'sheet_label'):
+                    self.view.sheet_label.config(text=worksheet.Name, foreground="black")
+                
+            except Exception as e:
+                messagebox.showerror("Excel Error", f"Could not access Excel workbook: {e}")
+                return
+            
+            # === Step 3: Get selected cell ===
+            try:
+                selected_range = xl.Selection
+                if not selected_range:
+                    messagebox.showwarning("No Selection", "Please select a cell in Excel first")
+                    return
+                    
+                selected_address = selected_range.Address
+                
+                # For Inspect Mode, focus on single cells only
+                if ':' in selected_address:
+                    # Take only the first cell from the range
+                    first_cell = selected_address.split(':')[0]
+                    selected_address = first_cell
+                    print(f"Range detected, scanning first cell: {first_cell}")
+                
+                # Remove $ signs for cleaner display
+                clean_address = selected_address.replace('$', '')
+                
+                print(f"Target cell: {clean_address}")
+                
+                # Update range label
+                if hasattr(self.view, 'range_label'):
+                    self.view.range_label.config(text=f"Selected Cell ({clean_address})", foreground="black")
+                
+            except Exception as e:
+                messagebox.showerror("Selection Error", f"Could not get selected cell: {e}")
+                return
+            
+            # === Step 4: Start timing and scan ===
+            start_time = time.time()
+            
+            # Clear previous results
+            if hasattr(self, 'all_formulas'):
+                self.all_formulas.clear()
+            
+            try:
+                # === KEY DIFFERENCE: Direct cell access, no SpecialCells ===
+                target_cell = worksheet.Range(selected_address)
+                
+                # Check if this cell has a formula
+                cell_formula = target_cell.Formula
+                
+                if cell_formula and cell_formula.startswith('='):
+                    # This cell has a formula
+                    print(f"Found formula: {cell_formula}")
+                    
+                    try:
+                        # Classify formula type
+                        from core.formula_classifier import classify_formula_type
+                        formula_type = classify_formula_type(cell_formula)
+                    except:
+                        formula_type = "unknown"
+                    
+                    try:
+                        # Read cell value
+                        cell_value = target_cell.Value
+                        display_val = str(cell_value)[:50] if cell_value is not None else "No Value"
+                    except:
+                        display_val = "Error reading value"
+                    
+                    try:
+                        # Read cell text
+                        cell_text = str(target_cell.Text).strip()
+                    except:
+                        cell_text = "Error reading text"
+                    
+                    # Add to formulas list
+                    if hasattr(self, 'all_formulas'):
+                        self.all_formulas.append((
+                            formula_type, 
+                            clean_address, 
+                            cell_formula, 
+                            display_val, 
+                            cell_text
+                        ))
+                    
+                    result_message = f"Found 1 formula in cell {clean_address}"
+                    print(f"Formula details: type={formula_type}, value={display_val}")
+                else:
+                    # No formula
+                    result_message = f"No formula found in cell {clean_address}"
+                    print("This cell has no formula")
+                
+            except Exception as e:
+                messagebox.showerror("Scan Error", f"Could not scan cell: {e}")
+                return
+            
+            # === Step 5: Complete scan ===
+            end_time = time.time()
+            scan_time = end_time - start_time
+            
+            print(f"Scan completed in {scan_time:.3f} seconds")
+            
+            # Update tree view
+            try:
+                from worksheet_tree import apply_filter
+                apply_filter(self)
+            except Exception as e:
+                print(f"Error updating tree view: {e}")
+            
+            # Update progress bar and labels
+            if hasattr(self.view, 'progress_bar'):
+                self.view.progress_bar['value'] = 100
+            if hasattr(self.view, 'progress_label'):
+                self.view.progress_label.config(text=f"{result_message} (Scan time: {scan_time:.3f}s)")
+            
+            # Update formula list label
+            if hasattr(self.view, 'formula_list_label'):
+                formula_count = len(getattr(self, 'all_formulas', []))
+                if formula_count == 0:
+                    self.view.formula_list_label.config(text="Formula List (No Formula Found)")
+                else:
+                    self.view.formula_list_label.config(text=f"Formula List ({formula_count} record):")
+            
+            print(f"Successfully scanned cell {clean_address} - Found {len(getattr(self, 'all_formulas', []))} formulas")
+            
+        except Exception as e:
+            messagebox.showerror("Connection Error", f"Could not connect to Excel: {e}")
+            print(f"Scan error: {e}")
+    
+    def close_all_tabs(self):
+        """Close all tabs except the main tab (same as Normal Mode)"""
+        try:
+            if hasattr(self, 'tab_manager') and self.tab_manager:
+                # Use the same method as Normal Mode
+                self.tab_manager.close_all_tabs_except_main()
+                print(f"Closed all tabs in {self.pane_name}")
+            else:
+                print(f"No tab manager found in {self.pane_name}")
+        except Exception as e:
+            from tkinter import messagebox
+            messagebox.showerror("Close Tabs Error", f"Could not close tabs: {e}")
+
+# Create the main Inspect Mode class
+class InspectMode:
+    """Main Inspect Mode class that creates the dual-pane simplified interface"""
+    
+    def __init__(self, parent_frame, root_app):
+        self.view = InspectModeView(parent_frame, root_app)
+    
+    def get_left_controller(self):
+        """Get the left pane controller"""
+        return self.view.left_controller
+    
+    def get_right_controller(self):
+        """Get the right pane controller"""
+        return self.view.right_controller
